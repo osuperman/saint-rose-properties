@@ -201,8 +201,12 @@ select.filter-select{padding:8px 12px;border:1px solid var(--border);border-radi
 .map-info-panel .mip-meta{font-size:.78rem;color:var(--text-light);margin-bottom:12px}
 .map-info-panel .mip-btn{width:100%;padding:8px 12px;background:var(--primary);color:#fff;border:none;border-radius:var(--radius);font-size:.82rem;font-weight:600;transition:background .15s}
 .map-info-panel .mip-btn:hover{background:var(--primary-light)}
-.map-label{background:rgba(255,255,255,.88);border:1px solid rgba(0,0,0,.1);box-shadow:0 1px 4px rgba(0,0,0,.15);padding:2px 7px;border-radius:4px;font-family:'Inter',system-ui,sans-serif;font-size:.72rem;font-weight:600;color:#1a202c;white-space:nowrap;pointer-events:none}
+.map-label{background:rgba(255,255,255,.5);border:1px solid rgba(0,0,0,.06);box-shadow:0 1px 3px rgba(0,0,0,.1);padding:2px 7px;border-radius:4px;font-family:'Inter',system-ui,sans-serif;font-size:.72rem;font-weight:600;color:#1a202c;white-space:nowrap;pointer-events:none}
 .leaflet-tooltip.map-label::before{display:none}
+.map-ctl-panel{position:absolute;top:12px;right:12px;z-index:1000;display:flex;flex-direction:column;gap:5px;pointer-events:all}
+.map-ctl-btn{background:rgba(255,255,255,.93);border:1px solid rgba(0,0,0,.12);border-radius:var(--radius);padding:6px 12px;font-size:.75rem;font-weight:600;color:var(--text-light);box-shadow:0 1px 4px rgba(0,0,0,.12);transition:all .15s;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.map-ctl-btn:hover{border-color:var(--primary-light);color:var(--primary);background:#fff}
+.map-ctl-btn.active{background:var(--primary);color:#fff;border-color:var(--primary)}
 .map-compare-bar{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:1000;background:#fff;border-radius:var(--radius-lg);box-shadow:0 4px 16px rgba(0,0,0,.22);padding:10px 14px;display:flex;align-items:center;gap:12px;pointer-events:all;white-space:nowrap}
 .mcb-items{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .mcb-item{display:flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px;font-size:.78rem;font-weight:600;color:var(--text)}
@@ -630,7 +634,13 @@ function CompareView({properties, onRemove, onSelect}) {
                   return (
                     <div className="compare-cell" key={p.id}>
                       <span className={`system-rating ${sys.n?ratingBg(sys.n):sys.r==='x'?'rx':'rna'}`} style={{marginRight:6}}>{sys.r}</span>
-                      {sys.c && <span style={{fontSize:'.75rem',color:'var(--text-muted)'}} title={sys.c}>💬</span>}
+                      {sys.c && (
+                        <span title={sys.c} style={{fontSize:'.71rem',color:'var(--primary-light)',cursor:'help',
+                          borderBottom:'1px dotted var(--primary-light)',marginLeft:5,maxWidth:115,
+                          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'inline-block',verticalAlign:'middle'}}>
+                          {sys.c.length > 26 ? sys.c.slice(0,24) + '…' : sys.c}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -649,7 +659,11 @@ function MapView({ search, riskFilter, onSelect, compareList, onCompare, onViewC
   const mapInst = useRef(null);
   const markers = useRef([]);
   const labels  = useRef([]);
-  const [sel, setSel] = useState(null); // property shown in the side panel
+  const [sel, setSel]               = useState(null);   // info panel property
+  const [showLabels, setShowLabels] = useState(true);   // address label toggle
+  const [compareMode, setCompareMode] = useState(false);// click-to-compare mode
+  const showLabelsRef  = useRef(true);   // readable inside Leaflet event closures
+  const compareModeRef = useRef(false);
 
   const RISK_COL = {'Low':'#38a169','Moderate':'#d69e2e','High':'#dd6b20','Very High':'#e53e3e'};
 
@@ -677,10 +691,10 @@ function MapView({ search, riskFilter, onSelect, compareList, onCompare, onViewC
     }).addTo(map);
     // Clicking the map background closes the info panel
     map.on('click', () => setSel(null));
-    // Show/hide address labels based on zoom level
+    // Show/hide address labels based on zoom level and toggle state
     map.on('zoomend', () => {
       const z = map.getZoom();
-      if (z >= 17) {
+      if (showLabelsRef.current && z >= 17) {
         labels.current.forEach(l => { if (!map.hasLayer(l)) l.addTo(map); });
       } else {
         labels.current.forEach(l => { if (map.hasLayer(l)) l.remove(); });
@@ -699,26 +713,29 @@ function MapView({ search, riskFilter, onSelect, compareList, onCompare, onViewC
   // Sync markers whenever filtered data changes
   useEffect(() => {
     if (!mapInst.current) return;
-    markers.current.forEach(m => m.remove());
+    markers.current.forEach(({marker}) => marker.remove());
     labels.current.forEach(l => l.remove());
     markers.current = [];
     labels.current = [];
+    const compareIds = new Set(compareList.map(c => c.id));
     displayData.forEach(p => {
       const col = RISK_COL[p.risk] || '#718096';
+      const inCmp = compareIds.has(p.id);
       const m = L.circleMarker([p.coords.lat, p.coords.lng], {
-        radius:9, fillColor:col, color:'#fff', weight:2, opacity:1, fillOpacity:.85
+        radius: inCmp ? 11 : 9, fillColor:col,
+        color: inCmp ? '#e8913a' : '#fff', weight: inCmp ? 3 : 2, opacity:1, fillOpacity:.85
       }).addTo(mapInst.current);
       // Hover tooltip — lightweight, dismisses automatically
       m.bindTooltip(
         `<strong>${p.streetNum} ${p.streetName}</strong>${p.buildingName ? '<br><span style="color:#718096">' + p.buildingName + '</span>' : ''}`,
         {direction:'top', offset:[0,-8], opacity:.97}
       );
-      // Click opens React-managed info panel (no Leaflet popup)
+      // Click: compare mode = direct toggle; normal mode = open info panel
       m.on('click', e => {
         L.DomEvent.stopPropagation(e);
-        setSel(p);
+        if (compareModeRef.current) { onCompare(p); } else { setSel(p); }
       });
-      markers.current.push(m);
+      markers.current.push({marker: m, id: p.id});
 
       // Permanent address label — only visible when zoomed in
       const label = L.tooltip({permanent:true, direction:'right', offset:[10,0], className:'map-label', opacity:1})
@@ -727,10 +744,34 @@ function MapView({ search, riskFilter, onSelect, compareList, onCompare, onViewC
       labels.current.push(label);
     });
     // Restore label visibility if already zoomed in enough
-    if (mapInst.current.getZoom() >= 17) {
+    if (showLabelsRef.current && mapInst.current.getZoom() >= 17) {
       labels.current.forEach(l => l.addTo(mapInst.current));
     }
   }, [displayData]);
+
+  // Keep refs in sync so Leaflet event closures always read the latest value
+  useEffect(() => { showLabelsRef.current = showLabels; compareModeRef.current = compareMode; }, [showLabels, compareMode]);
+
+  // Toggle label visibility when showLabels state changes
+  useEffect(() => {
+    if (!mapInst.current) return;
+    const z = mapInst.current.getZoom();
+    if (showLabels && z >= 17) {
+      labels.current.forEach(l => { if (!mapInst.current.hasLayer(l)) l.addTo(mapInst.current); });
+    } else {
+      labels.current.forEach(l => { if (mapInst.current.hasLayer(l)) l.remove(); });
+    }
+  }, [showLabels]);
+
+  // Update marker ring styles when compareList changes
+  useEffect(() => {
+    if (!mapInst.current) return;
+    const compareIds = new Set(compareList.map(p => p.id));
+    markers.current.forEach(({marker, id}) => {
+      const inCmp = compareIds.has(id);
+      marker.setStyle({radius: inCmp ? 11 : 9, weight: inCmp ? 3 : 2, color: inCmp ? '#e8913a' : '#fff'});
+    });
+  }, [compareList]);
 
   const handleViewDetails = () => {
     if (!sel) return;
@@ -791,6 +832,17 @@ function MapView({ search, riskFilter, onSelect, compareList, onCompare, onViewC
           </button>
         </div>
       )}
+
+      <div className="map-ctl-panel">
+        <button className={`map-ctl-btn ${compareMode ? 'active' : ''}`} onClick={() => setCompareMode(c => !c)}
+          title={compareMode ? 'Click a marker to toggle compare. Click again to exit.' : 'Enable compare mode: click markers directly to add/remove from compare'}>
+          {compareMode ? '✓ Compare Mode' : '⊕ Compare Mode'}
+        </button>
+        <button className={`map-ctl-btn ${showLabels ? 'active' : ''}`} onClick={() => setShowLabels(s => !s)}
+          title="Toggle address labels (visible at zoom 17+)">
+          🏷 Labels {showLabels ? 'On' : 'Off'}
+        </button>
+      </div>
 
       <div className="map-legend">
         <div style={{fontWeight:700,marginBottom:3,fontSize:'.8rem',color:'var(--text)'}}>Investment Risk</div>
