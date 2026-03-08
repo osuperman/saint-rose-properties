@@ -559,6 +559,35 @@ function DetailView({prop, onClose}) {
   );
 }
 
+// Portal tooltip — renders into document.body so it escapes any overflow:auto clipping
+function CmpTooltip({text, children}) {
+  const [pos, setPos] = useState(null);
+  const onMouseEnter = e => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setPos({x: r.left + r.width / 2, y: r.bottom + 8});
+  };
+  const onMouseLeave = () => setPos(null);
+  return (
+    <>
+      <span onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}
+        style={{fontSize:'.68rem',color:'var(--primary-light)',cursor:'help',
+          borderBottom:'1px dotted var(--primary-light)',maxWidth:120,
+          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block',textAlign:'center'}}>
+        {children}
+      </span>
+      {pos && ReactDOM.createPortal(
+        <div style={{position:'fixed',left:pos.x,top:pos.y,transform:'translateX(-50%)',
+          background:'#1a202c',color:'#fff',padding:'8px 12px',borderRadius:7,
+          fontSize:'.78rem',lineHeight:1.5,width:260,maxWidth:'90vw',zIndex:99999,
+          boxShadow:'0 6px 20px rgba(0,0,0,.35)',pointerEvents:'none',whiteSpace:'normal'}}>
+          {text}
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 function CompareView({properties, onRemove, onSelect}) {
   if(properties.length === 0) {
     return <div className="empty-state" style={{padding:'80px 20px'}}><div className="icon">⚖️</div><p>Select properties to compare by clicking the "+ Compare" button on any property card.</p></div>;
@@ -637,11 +666,9 @@ function CompareView({properties, onRemove, onSelect}) {
                     <div className="compare-cell" key={p.id} style={{flexDirection:'column',gap:4}}>
                       <span className={`system-rating ${sys.n?ratingBg(sys.n):sys.r==='x'?'rx':'rna'}`}>{sys.r}</span>
                       {sys.c && (
-                        <span title={sys.c} style={{fontSize:'.68rem',color:'var(--primary-light)',cursor:'help',
-                          borderBottom:'1px dotted var(--primary-light)',maxWidth:120,
-                          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block',textAlign:'center'}}>
+                        <CmpTooltip text={sys.c}>
                           {sys.c.length > 22 ? sys.c.slice(0,20) + '…' : sys.c}
-                        </span>
+                        </CmpTooltip>
                       )}
                     </div>
                   );
