@@ -201,6 +201,8 @@ select.filter-select{padding:8px 12px;border:1px solid var(--border);border-radi
 .map-info-panel .mip-meta{font-size:.78rem;color:var(--text-light);margin-bottom:12px}
 .map-info-panel .mip-btn{width:100%;padding:8px 12px;background:var(--primary);color:#fff;border:none;border-radius:var(--radius);font-size:.82rem;font-weight:600;transition:background .15s}
 .map-info-panel .mip-btn:hover{background:var(--primary-light)}
+.map-label{background:rgba(255,255,255,.88);border:1px solid rgba(0,0,0,.1);box-shadow:0 1px 4px rgba(0,0,0,.15);padding:2px 7px;border-radius:4px;font-family:'Inter',system-ui,sans-serif;font-size:.72rem;font-weight:600;color:#1a202c;white-space:nowrap;pointer-events:none}
+.leaflet-tooltip.map-label::before{display:none}
 </style>
 </head>
 <body>
@@ -637,6 +639,7 @@ function MapView({ search, riskFilter, onSelect }) {
   const mapRef  = useRef(null);
   const mapInst = useRef(null);
   const markers = useRef([]);
+  const labels  = useRef([]);
   const [sel, setSel] = useState(null); // property shown in the side panel
 
   const RISK_COL = {'Low':'#38a169','Moderate':'#d69e2e','High':'#dd6b20','Very High':'#e53e3e'};
@@ -665,6 +668,15 @@ function MapView({ search, riskFilter, onSelect }) {
     }).addTo(map);
     // Clicking the map background closes the info panel
     map.on('click', () => setSel(null));
+    // Show/hide address labels based on zoom level
+    map.on('zoomend', () => {
+      const z = map.getZoom();
+      if (z >= 17) {
+        labels.current.forEach(l => { if (!map.hasLayer(l)) l.addTo(map); });
+      } else {
+        labels.current.forEach(l => { if (map.hasLayer(l)) l.remove(); });
+      }
+    });
     mapInst.current = map;
     return () => { if (mapInst.current) { mapInst.current.remove(); mapInst.current = null; } };
   }, []);
@@ -679,7 +691,9 @@ function MapView({ search, riskFilter, onSelect }) {
   useEffect(() => {
     if (!mapInst.current) return;
     markers.current.forEach(m => m.remove());
+    labels.current.forEach(l => l.remove());
     markers.current = [];
+    labels.current = [];
     displayData.forEach(p => {
       const col = RISK_COL[p.risk] || '#718096';
       const m = L.circleMarker([p.coords.lat, p.coords.lng], {
@@ -696,7 +710,17 @@ function MapView({ search, riskFilter, onSelect }) {
         setSel(p);
       });
       markers.current.push(m);
+
+      // Permanent address label — only visible when zoomed in
+      const label = L.tooltip({permanent:true, direction:'right', offset:[10,0], className:'map-label', opacity:1})
+        .setLatLng([p.coords.lat, p.coords.lng])
+        .setContent(p.streetNum + ' ' + p.streetName);
+      labels.current.push(label);
     });
+    // Restore label visibility if already zoomed in enough
+    if (mapInst.current.getZoom() >= 17) {
+      labels.current.forEach(l => l.addTo(mapInst.current));
+    }
   }, [displayData]);
 
   const handleViewDetails = () => {
