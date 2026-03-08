@@ -8,8 +8,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="data.js"></script>
 <script src="parcel-data.js"></script>
+<script src="coords-data.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -185,6 +188,10 @@ select.filter-select{padding:8px 12px;border:1px solid var(--border);border-radi
 .exempt-tag{font-size:.7rem;background:#f0fff4;color:var(--risk-low);border:1px solid #c6f6d5;padding:2px 8px;border-radius:10px;font-weight:600}
 .taxable-tag{font-size:.7rem;background:#fff5f5;color:var(--risk-vhigh);border:1px solid #fed7d7;padding:2px 8px;border-radius:10px;font-weight:600}
 .parcel-section-title{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:18px 0 8px}
+/* Map view */
+.map-wrap{position:relative;margin-bottom:20px}
+.map-container{width:100%;height:calc(100vh - 240px);min-height:520px;border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg)}
+.map-legend{position:absolute;bottom:32px;right:12px;z-index:1000;background:#fff;padding:10px 14px;border-radius:var(--radius);box-shadow:0 2px 8px rgba(0,0,0,.18);font-size:.78rem;line-height:1.9;pointer-events:none}
 </style>
 </head>
 <body>
@@ -616,6 +623,94 @@ function CompareView({properties, onRemove, onSelect}) {
   );
 }
 
+// ======================== MAP VIEW ========================
+function MapView({ search, riskFilter, onSelect }) {
+  const mapRef  = useRef(null);
+  const mapInst = useRef(null);
+  const markers = useRef([]);
+
+  const displayData = useMemo(() => {
+    const coords = (typeof COORDS_DATA !== 'undefined') ? COORDS_DATA : {};
+    return ENRICHED_DATA.filter(p => {
+      if (!coords[p.id]) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        if (!p.name.toLowerCase().includes(q) &&
+            !p.address.toLowerCase().includes(q) &&
+            !(p.buildingName||'').toLowerCase().includes(q)) return false;
+      }
+      return riskFilter === 'All' || p.risk === riskFilter;
+    }).map(p => ({...p, coords: coords[p.id]}));
+  }, [search, riskFilter]);
+
+  // Initialise Leaflet map once on mount
+  useEffect(() => {
+    if (!mapRef.current || mapInst.current || typeof L === 'undefined') return;
+    mapInst.current = L.map(mapRef.current, {center:[42.6632,-73.7862], zoom:16});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom:19
+    }).addTo(mapInst.current);
+    return () => { if (mapInst.current) { mapInst.current.remove(); mapInst.current = null; } };
+  }, []);
+
+  // Invalidate size after first paint (container may have been hidden on previous view)
+  useEffect(() => {
+    const t = setTimeout(() => { if (mapInst.current) mapInst.current.invalidateSize(); }, 80);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Sync markers whenever filtered data changes
+  useEffect(() => {
+    if (!mapInst.current) return;
+    markers.current.forEach(m => m.remove());
+    markers.current = [];
+    const RISK_COL = {'Low':'#38a169','Moderate':'#d69e2e','High':'#dd6b20','Very High':'#e53e3e'};
+    window.__mapDetail = id => { const p = ENRICHED_DATA.find(x => x.id === id); if(p) onSelect(p); };
+    displayData.forEach(p => {
+      const col = RISK_COL[p.risk] || '#718096';
+      const fmv = fmtK(p.parcel?.fullMarketValue);
+      const m = L.circleMarker([p.coords.lat, p.coords.lng], {
+        radius:9, fillColor:col, color:'#fff', weight:2, opacity:1, fillOpacity:.85
+      }).addTo(mapInst.current);
+      m.bindPopup(
+        `<div style="font-family:Inter,system-ui,sans-serif;min-width:195px;padding:2px 0">` +
+        `<div style="font-weight:700;font-size:.93rem;color:#1a202c;margin-bottom:3px">${p.streetNum} ${p.streetName}</div>` +
+        (p.buildingName ? `<div style="font-size:.77rem;color:#718096;margin-bottom:7px">${p.buildingName}</div>` : `<div style="margin-bottom:7px"></div>`) +
+        `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px">` +
+        `<span style="background:${col};color:#fff;padding:2px 9px;border-radius:10px;font-size:.73rem;font-weight:700">${p.condScore} \xb7 ${p.risk} Risk</span>` +
+        (fmv ? `<span style="background:#ebf4ff;color:#2c5282;padding:2px 8px;border-radius:10px;font-size:.73rem;font-weight:700">${fmv}</span>` : '') +
+        `</div>` +
+        `<div style="font-size:.77rem;color:#4a5568;margin-bottom:9px">${p.sqFt} sq ft \xa0\xb7\xa0 ${p.pctGood}% good+</div>` +
+        `<button onclick="window.__mapDetail('${p.id}')" ` +
+        `style="width:100%;padding:7px 10px;background:#1e3a5f;color:#fff;border:none;border-radius:6px;font-size:.81rem;font-weight:600;cursor:pointer" ` +
+        `onmouseover="this.style.background='#2c5282'" onmouseout="this.style.background='#1e3a5f'">View Details \u2192</button></div>`,
+        {maxWidth:260}
+      );
+      markers.current.push(m);
+    });
+  }, [displayData, onSelect]);
+
+  const RISK_COL = {'Low':'#38a169','Moderate':'#d69e2e','High':'#dd6b20','Very High':'#e53e3e'};
+  return (
+    <div className="map-wrap">
+      <div ref={mapRef} className="map-container"/>
+      <div className="map-legend">
+        <div style={{fontWeight:700,marginBottom:3,fontSize:'.8rem',color:'var(--text)'}}>Investment Risk</div>
+        {['Low','Moderate','High','Very High'].map(r => (
+          <div key={r} style={{display:'flex',alignItems:'center',gap:7}}>
+            <div style={{width:11,height:11,borderRadius:'50%',background:RISK_COL[r],flexShrink:0}}/>
+            <span style={{color:'var(--text-light)'}}>{r}</span>
+          </div>
+        ))}
+        <div style={{marginTop:6,paddingTop:6,borderTop:'1px solid var(--border)',color:'var(--text-muted)',fontSize:'.73rem'}}>
+          {displayData.length} of 69 shown
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ======================== MAIN APP ========================
 function App() {
   const [view, setView] = useState('grid');
@@ -673,6 +768,7 @@ function App() {
           </div>
           <div className="nav-tabs">
             <button className={`nav-tab ${view==='grid'?'active':''}`} onClick={()=>setView('grid')}>Properties</button>
+            <button className={`nav-tab ${view==='map'?'active':''}`} onClick={()=>setView('map')}>🗺 Map</button>
             <button className={`nav-tab ${view==='compare'?'active':''}`} onClick={()=>setView('compare')}>
               Compare {compareList.length > 0 && <span className="compare-badge">{compareList.length}</span>}
             </button>
@@ -681,7 +777,7 @@ function App() {
       </header>
 
       <div className="container">
-        {view === 'grid' && (
+        {(view === 'grid' || view === 'map') && (
           <>
             <div className="stats-bar">
               <div className="stat-card"><div className="stat-value">69</div><div className="stat-label">Properties</div></div>
@@ -702,22 +798,28 @@ function App() {
                   <option>All</option><option>Low</option><option>Moderate</option><option>High</option><option>Very High</option>
                 </select>
               </div>
-              <div className="filter-group">
-                <span className="filter-label">Sort:</span>
-                <select className="filter-select" value={sortBy} onChange={e=>setSortBy(e.target.value)}>
-                  <option value="score-desc">Score: High → Low</option>
-                  <option value="score-asc">Score: Low → High</option>
-                  <option value="sqft-desc">Sq Ft: Largest</option>
-                  <option value="sqft-asc">Sq Ft: Smallest</option>
-                  <option value="pctgood-desc">% Good: High → Low</option>
-                  <option value="value-desc">Market Value: High → Low</option>
-                  <option value="value-asc">Market Value: Low → High</option>
-                  <option value="address-asc">Address: A → Z</option>
-                </select>
-              </div>
+              {view === 'grid' && (
+                <div className="filter-group">
+                  <span className="filter-label">Sort:</span>
+                  <select className="filter-select" value={sortBy} onChange={e=>setSortBy(e.target.value)}>
+                    <option value="score-desc">Score: High → Low</option>
+                    <option value="score-asc">Score: Low → High</option>
+                    <option value="sqft-desc">Sq Ft: Largest</option>
+                    <option value="sqft-asc">Sq Ft: Smallest</option>
+                    <option value="pctgood-desc">% Good: High → Low</option>
+                    <option value="value-desc">Market Value: High → Low</option>
+                    <option value="value-asc">Market Value: Low → High</option>
+                    <option value="address-asc">Address: A → Z</option>
+                  </select>
+                </div>
+              )}
               <div style={{fontSize:'.82rem',color:'var(--text-muted)'}}>{filtered.length} properties</div>
             </div>
+          </>
+        )}
 
+        {view === 'grid' && (
+          <>
             <div className="property-grid">
               {filtered.map(p => (
                 <PropertyCard key={p.id} prop={p} onSelect={setSelectedProp} onCompare={toggleCompare} isCompared={compareList.some(c=>c.id===p.id)}/>
@@ -725,6 +827,10 @@ function App() {
             </div>
             {filtered.length === 0 && <div className="empty-state"><div className="icon">🔍</div><p>No properties match your search</p></div>}
           </>
+        )}
+
+        {view === 'map' && (
+          <MapView search={search} riskFilter={riskFilter} onSelect={setSelectedProp}/>
         )}
 
         {view === 'compare' && (
