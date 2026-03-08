@@ -203,6 +203,15 @@ select.filter-select{padding:8px 12px;border:1px solid var(--border);border-radi
 .map-info-panel .mip-btn:hover{background:var(--primary-light)}
 .map-label{background:rgba(255,255,255,.88);border:1px solid rgba(0,0,0,.1);box-shadow:0 1px 4px rgba(0,0,0,.15);padding:2px 7px;border-radius:4px;font-family:'Inter',system-ui,sans-serif;font-size:.72rem;font-weight:600;color:#1a202c;white-space:nowrap;pointer-events:none}
 .leaflet-tooltip.map-label::before{display:none}
+.map-compare-bar{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);z-index:1000;background:#fff;border-radius:var(--radius-lg);box-shadow:0 4px 16px rgba(0,0,0,.22);padding:10px 14px;display:flex;align-items:center;gap:12px;pointer-events:all;white-space:nowrap}
+.mcb-items{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.mcb-item{display:flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:4px 10px;font-size:.78rem;font-weight:600;color:var(--text)}
+.mcb-item-remove{background:none;border:none;color:var(--text-muted);font-size:.8rem;line-height:1;padding:0 2px;margin-left:2px}
+.mcb-item-remove:hover{color:var(--risk-vhigh)}
+.mcb-hint{font-size:.78rem;color:var(--text-muted);font-style:italic}
+.mcb-go{padding:8px 16px;background:var(--primary);color:#fff;border:none;border-radius:var(--radius);font-size:.82rem;font-weight:600;white-space:nowrap;transition:background .15s}
+.mcb-go:hover:not(:disabled){background:var(--primary-light)}
+.mcb-go:disabled{background:#a0aec0;cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -635,7 +644,7 @@ function CompareView({properties, onRemove, onSelect}) {
 }
 
 // ======================== MAP VIEW ========================
-function MapView({ search, riskFilter, onSelect }) {
+function MapView({ search, riskFilter, onSelect, compareList, onCompare, onViewCompare }) {
   const mapRef  = useRef(null);
   const mapInst = useRef(null);
   const markers = useRef([]);
@@ -730,6 +739,8 @@ function MapView({ search, riskFilter, onSelect }) {
     onSelect(prop);
   };
 
+  const isCmp = sel ? compareList.some(p => p.id === sel.id) : false;
+
   return (
     <div className="map-wrap">
       <div ref={mapRef} className="map-container"/>
@@ -750,7 +761,34 @@ function MapView({ search, riskFilter, onSelect }) {
             )}
           </div>
           <div className="mip-meta">{sel.sqFt} sq ft &nbsp;·&nbsp; {sel.pctGood}% good+</div>
-          <button className="mip-btn" onClick={handleViewDetails}>View Full Details →</button>
+          <div style={{display:'flex',gap:6}}>
+            <button
+              onClick={() => onCompare(sel)}
+              style={{flex:'0 0 auto',padding:'7px 12px',borderRadius:'var(--radius)',border:'1px solid',
+                borderColor: isCmp ? 'var(--primary)' : 'var(--border)',
+                background: isCmp ? 'var(--primary)' : '#fff',
+                color: isCmp ? '#fff' : 'var(--text-light)',
+                fontSize:'.78rem',fontWeight:600,transition:'all .15s',whiteSpace:'nowrap'}}
+            >{isCmp ? '✓ Compare' : '+ Compare'}</button>
+            <button className="mip-btn" style={{flex:1}} onClick={handleViewDetails}>Details →</button>
+          </div>
+        </div>
+      )}
+
+      {compareList.length > 0 && (
+        <div className="map-compare-bar">
+          <div className="mcb-items">
+            {compareList.map(p => (
+              <div key={p.id} className="mcb-item">
+                {p.streetNum} {p.streetName}
+                <button className="mcb-item-remove" onClick={() => onCompare(p)} title="Remove">✕</button>
+              </div>
+            ))}
+            {compareList.length === 1 && <span className="mcb-hint">select 1 more to compare</span>}
+          </div>
+          <button className="mcb-go" disabled={compareList.length < 2} onClick={onViewCompare}>
+            Compare {compareList.length} →
+          </button>
         </div>
       )}
 
@@ -889,7 +927,7 @@ function App() {
         )}
 
         {view === 'map' && (
-          <MapView search={search} riskFilter={riskFilter} onSelect={setSelectedProp}/>
+          <MapView search={search} riskFilter={riskFilter} onSelect={setSelectedProp} compareList={compareList} onCompare={toggleCompare} onViewCompare={() => setView('compare')}/>
         )}
 
         {view === 'compare' && (
