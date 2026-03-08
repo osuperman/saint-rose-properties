@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="data.js"></script>
+<script src="parcel-data.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -170,6 +171,20 @@ select.filter-select{padding:8px 12px;border:1px solid var(--border);border-radi
 
 /* Footer */
 .footer{text-align:center;padding:30px 20px;color:var(--text-muted);font-size:.8rem;margin-top:40px;border-top:1px solid var(--border)}
+
+/* Parcel / Assessment data */
+.parcel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.parcel-item{background:var(--bg);border-radius:var(--radius);padding:14px;text-align:center}
+.parcel-item .pval{font-size:1.3rem;font-weight:800;color:var(--primary)}
+.parcel-item .plbl{font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+.parcel-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);font-size:.85rem}
+.parcel-row:last-child{border-bottom:none}
+.parcel-row-label{color:var(--text-muted);font-weight:500}
+.parcel-row-val{font-weight:600;color:var(--text)}
+.fmv-chip{font-size:.72rem;font-weight:700;background:#ebf4ff;color:var(--primary-light);padding:2px 8px;border-radius:10px;margin-left:6px;white-space:nowrap}
+.exempt-tag{font-size:.7rem;background:#f0fff4;color:var(--risk-low);border:1px solid #c6f6d5;padding:2px 8px;border-radius:10px;font-weight:600}
+.taxable-tag{font-size:.7rem;background:#fff5f5;color:var(--risk-vhigh);border:1px solid #fed7d7;padding:2px 8px;border-radius:10px;font-weight:600}
+.parcel-section-title{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin:18px 0 8px}
 </style>
 </head>
 <body>
@@ -182,6 +197,14 @@ const riskClass = r => r === 'Low' ? 'low' : r === 'Moderate' ? 'moderate' : r =
 const ratingBg = n => n===5?'r5':n===4?'r4':n===3?'r3':n===2?'r2':n===1?'r1':'rna';
 const ratingDesc = r => ({'5':'Excellent','4':'Good','3':'Fair','2':'Poor','1':'Critical','N/A':'N/A','x':'Not Accessible','-':'Not Evaluated'}[r]||r);
 const fmt = n => typeof n === 'number' ? n.toLocaleString() : n;
+const fmtDollars = n => (n != null && n > 0) ? '$' + n.toLocaleString() : '—';
+const fmtK = n => (n != null && n > 0) ? '$' + (n/1000).toFixed(0) + 'K' : null;
+
+// Merge parcel data into each property
+const ENRICHED_DATA = PROPERTY_DATA.map(p => ({
+  ...p,
+  parcel: (typeof PARCEL_DATA !== 'undefined' && PARCEL_DATA[p.id]) || null
+}));
 
 function catAvg(systems) {
   const nums = systems.map(s=>s.n).filter(n=>n!==null);
@@ -221,6 +244,9 @@ function PropertyCard({prop, onSelect, onCompare, isCompared}) {
             <span className="card-meta-item"><strong>{prop.sqFt}</strong> sq ft</span>
             <span className="card-meta-item"><strong>{prop.totalSystems}</strong> systems</span>
             <span className="card-meta-item"><strong>{prop.pctGood}%</strong> good+</span>
+            {prop.parcel && fmtK(prop.parcel.fullMarketValue) && (
+              <span className="fmv-chip">{fmtK(prop.parcel.fullMarketValue)}</span>
+            )}
           </div>
           <ScoreDistBar counts={prop.counts} total={prop.ratedSystems}/>
         </div>
@@ -273,6 +299,11 @@ function DetailView({prop, onClose}) {
             <span className="detail-meta-chip">{prop.sqFt} sq ft</span>
             <span className="detail-meta-chip">{prop.pctGood}% Good or Better</span>
             <span className="detail-meta-chip">{prop.totalSystems} Systems</span>
+            {prop.parcel && prop.parcel.fullMarketValue > 0 && (
+              <span className="detail-meta-chip" style={{background:'rgba(232,145,58,.25)',fontWeight:700}}>
+                FMV: {fmtDollars(prop.parcel.fullMarketValue)}
+              </span>
+            )}
           </div>
         </div>
         <div className="detail-body">
@@ -286,6 +317,7 @@ function DetailView({prop, onClose}) {
           <div className="tab-row">
             <button className={`tab-btn ${tab==='overview'?'active':''}`} onClick={()=>setTab('overview')}>Overview</button>
             <button className={`tab-btn ${tab==='ratings'?'active':''}`} onClick={()=>setTab('ratings')}>Condition Ratings</button>
+            <button className={`tab-btn ${tab==='valuation'?'active':''}`} onClick={()=>setTab('valuation')}>Assessment {prop.parcel ? '✓' : ''}</button>
             <button className={`tab-btn ${tab==='photos'?'active':''}`} onClick={()=>setTab('photos')}>Photos ({prop.photos.length})</button>
             <button className={`tab-btn ${tab==='plans'?'active':''}`} onClick={()=>setTab('plans')}>Floor Plans ({prop.floorPlans.length})</button>
           </div>
@@ -333,6 +365,124 @@ function DetailView({prop, onClose}) {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+
+          {tab === 'valuation' && (
+            <div>
+              {!prop.parcel ? (
+                <div className="empty-state">
+                  <div className="icon">📊</div>
+                  <p>Parcel assessment data not available for this property</p>
+                  <p style={{marginTop:8,fontSize:'.8rem'}}>
+                    <a href={prop.taxAssessment} target="_blank" rel="noopener">Search Albany Assessment Database →</a>
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <div className="parcel-grid">
+                    <div className="parcel-item">
+                      <div className="pval" style={{color:'var(--accent)'}}>{fmtDollars(prop.parcel.fullMarketValue)}</div>
+                      <div className="plbl">Full Market Value</div>
+                    </div>
+                    <div className="parcel-item">
+                      <div className="pval">{fmtDollars(prop.parcel.assessedValue)}</div>
+                      <div className="plbl">Assessed Value</div>
+                    </div>
+                    <div className="parcel-item">
+                      <div className="pval">{fmtDollars(prop.parcel.landValue)}</div>
+                      <div className="plbl">Land Value</div>
+                    </div>
+                    <div className="parcel-item">
+                      <div className="pval" style={{fontSize:'1rem'}}>
+                        {(prop.parcel.countyTaxable + prop.parcel.cityTaxable + prop.parcel.schoolTaxable) === 0
+                          ? <span className="exempt-tag">Tax Exempt</span>
+                          : <span className="taxable-tag">{fmtDollars(prop.parcel.countyTaxable + prop.parcel.cityTaxable + prop.parcel.schoolTaxable)}</span>
+                        }
+                      </div>
+                      <div className="plbl">Tax Status</div>
+                    </div>
+                  </div>
+
+                  <div className="parcel-section-title">Parcel Details</div>
+                  <div className="parcel-row">
+                    <span className="parcel-row-label">Property Class</span>
+                    <span className="parcel-row-val">{prop.parcel.propClassDesc} ({prop.parcel.propClass})</span>
+                  </div>
+                  <div className="parcel-row">
+                    <span className="parcel-row-label">Current Owner</span>
+                    <span className="parcel-row-val">{prop.parcel.owner1 || '—'}</span>
+                  </div>
+                  {prop.parcel.yearBuilt && (
+                    <div className="parcel-row">
+                      <span className="parcel-row-label">Year Built</span>
+                      <span className="parcel-row-val">{prop.parcel.yearBuilt}</span>
+                    </div>
+                  )}
+                  <div className="parcel-row">
+                    <span className="parcel-row-label">Lot Size</span>
+                    <span className="parcel-row-val">
+                      {prop.parcel.acres ? `${prop.parcel.acres} acres` : '—'}
+                      {prop.parcel.frontage && prop.parcel.depth ? ` · ${prop.parcel.frontage}′ × ${prop.parcel.depth}′` : ''}
+                    </span>
+                  </div>
+                  <div className="parcel-row">
+                    <span className="parcel-row-label">Parcel ID</span>
+                    <span className="parcel-row-val" style={{fontFamily:'monospace',fontSize:'.8rem'}}>{prop.parcel.printKey || prop.parcel.parcelId}</span>
+                  </div>
+                  {prop.parcel.deedYear && (
+                    <div className="parcel-row">
+                      <span className="parcel-row-label">Deed Year</span>
+                      <span className="parcel-row-val">{prop.parcel.deedYear}</span>
+                    </div>
+                  )}
+                  {prop.parcel.neighborhood && (
+                    <div className="parcel-row">
+                      <span className="parcel-row-label">Neighborhood</span>
+                      <span className="parcel-row-val">{prop.parcel.neighborhood}</span>
+                    </div>
+                  )}
+                  <div className="parcel-row">
+                    <span className="parcel-row-label">Roll Address</span>
+                    <span className="parcel-row-val" style={{color:'var(--text-muted)',fontSize:'.8rem'}}>{prop.parcel.rollAddress}</span>
+                  </div>
+
+                  {prop.parcel.exemptions && prop.parcel.exemptions.length > 0 && (
+                    <div>
+                      <div className="parcel-section-title">Tax Exemptions</div>
+                      {prop.parcel.exemptions.map((ex, i) => (
+                        <div className="parcel-row" key={i}>
+                          <span className="parcel-row-label">{ex.name || ex.code}</span>
+                          <span className="parcel-row-val exempt-tag">{ex.code}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {prop.parcel.countyTaxable > 0 && (
+                    <div>
+                      <div className="parcel-section-title">Taxable Values</div>
+                      <div className="parcel-row">
+                        <span className="parcel-row-label">County Taxable</span>
+                        <span className="parcel-row-val">{fmtDollars(prop.parcel.countyTaxable)}</span>
+                      </div>
+                      <div className="parcel-row">
+                        <span className="parcel-row-label">City Taxable</span>
+                        <span className="parcel-row-val">{fmtDollars(prop.parcel.cityTaxable)}</span>
+                      </div>
+                      <div className="parcel-row">
+                        <span className="parcel-row-label">School Taxable</span>
+                        <span className="parcel-row-val">{fmtDollars(prop.parcel.schoolTaxable)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div style={{marginTop:16,fontSize:'.78rem',color:'var(--text-muted)'}}>
+                    Source: Albany County 2025 Final Assessment Roll · Uniform % of Value: 96%
+                    {' · '}<a href={prop.taxAssessment} target="_blank" rel="noopener">Albany Assessment Search →</a>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -416,6 +566,31 @@ function CompareView({properties, onRemove, onSelect}) {
         <div className="compare-cell label-cell">% Good or Better</div>
         {properties.map(p => <div className="compare-cell" key={p.id} style={{fontWeight:600,color:p.pctGood>=50?'var(--risk-low)':'var(--risk-high)'}}>{p.pctGood}%</div>)}
 
+        <div className="compare-cell label-cell">Market Value</div>
+        {properties.map(p => <div className="compare-cell" key={p.id} style={{fontWeight:600,color:'var(--accent)'}}>{p.parcel ? fmtDollars(p.parcel.fullMarketValue) : '—'}</div>)}
+
+        <div className="compare-cell label-cell">Assessed Value</div>
+        {properties.map(p => <div className="compare-cell" key={p.id}>{p.parcel ? fmtDollars(p.parcel.assessedValue) : '—'}</div>)}
+
+        <div className="compare-cell label-cell">Land Value</div>
+        {properties.map(p => <div className="compare-cell" key={p.id}>{p.parcel ? fmtDollars(p.parcel.landValue) : '—'}</div>)}
+
+        <div className="compare-cell label-cell">Property Class</div>
+        {properties.map(p => <div className="compare-cell" key={p.id} style={{fontSize:'.8rem',textAlign:'center'}}>{p.parcel ? p.parcel.propClassDesc : '—'}</div>)}
+
+        <div className="compare-cell label-cell">Lot Size</div>
+        {properties.map(p => <div className="compare-cell" key={p.id} style={{fontSize:'.8rem'}}>{p.parcel?.acres ? `${p.parcel.acres} ac` : '—'}</div>)}
+
+        <div className="compare-cell label-cell">Tax Status</div>
+        {properties.map(p => (
+          <div className="compare-cell" key={p.id}>
+            {!p.parcel ? '—' : (p.parcel.countyTaxable + p.parcel.cityTaxable + p.parcel.schoolTaxable) === 0
+              ? <span className="exempt-tag">Exempt</span>
+              : <span className="taxable-tag">Taxable</span>
+            }
+          </div>
+        ))}
+
         {allCats.map(cat => (
           <React.Fragment key={cat}>
             <div className="compare-cell cat-label" style={{gridColumn:`1 / span ${cols}`}}>{cat}</div>
@@ -460,7 +635,7 @@ function App() {
   }, []);
 
   const filtered = useMemo(() => {
-    let list = [...PROPERTY_DATA];
+    let list = [...ENRICHED_DATA];
     if(search) {
       const q = search.toLowerCase();
       list = list.filter(p => p.name.toLowerCase().includes(q) || p.address.toLowerCase().includes(q) || (p.buildingName||'').toLowerCase().includes(q));
@@ -474,6 +649,7 @@ function App() {
       else if(field === 'sqft') { va = parseInt(a.sqFt.replace(/,/g,'')); vb = parseInt(b.sqFt.replace(/,/g,'')); }
       else if(field === 'address') { va = a.address; vb = b.address; }
       else if(field === 'pctgood') { va = a.pctGood; vb = b.pctGood; }
+      else if(field === 'value') { va = a.parcel?.fullMarketValue || 0; vb = b.parcel?.fullMarketValue || 0; }
       if(typeof va === 'string') return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
       return dir === 'asc' ? va - vb : vb - va;
     });
@@ -481,10 +657,11 @@ function App() {
   }, [search, riskFilter, sortBy]);
 
   // Stats
-  const avgScore = (PROPERTY_DATA.reduce((s,p)=>s+p.condScore,0)/PROPERTY_DATA.length).toFixed(1);
-  const totalSqFt = PROPERTY_DATA.reduce((s,p)=>s+parseInt(p.sqFt.replace(/,/g,'')),0);
+  const avgScore = (ENRICHED_DATA.reduce((s,p)=>s+p.condScore,0)/ENRICHED_DATA.length).toFixed(1);
+  const totalSqFt = ENRICHED_DATA.reduce((s,p)=>s+parseInt(p.sqFt.replace(/,/g,'')),0);
+  const totalFMV = ENRICHED_DATA.reduce((s,p)=>s+(p.parcel?.fullMarketValue||0),0);
   const riskCounts = {Low:0,Moderate:0,High:0,'Very High':0};
-  PROPERTY_DATA.forEach(p => riskCounts[p.risk]++);
+  ENRICHED_DATA.forEach(p => riskCounts[p.risk]++);
 
   return (
     <div>
@@ -510,6 +687,7 @@ function App() {
               <div className="stat-card"><div className="stat-value">69</div><div className="stat-label">Properties</div></div>
               <div className="stat-card accent"><div className="stat-value">{avgScore}</div><div className="stat-label">Avg Condition</div></div>
               <div className="stat-card"><div className="stat-value">{(totalSqFt/1000).toFixed(0)}K</div><div className="stat-label">Total Sq Ft</div></div>
+              <div className="stat-card"><div className="stat-value" style={{color:'var(--accent)'}}>${(totalFMV/1e6).toFixed(1)}M</div><div className="stat-label">Portfolio Value</div></div>
               <div className="stat-card"><div className="stat-value" style={{color:'var(--risk-low)'}}>{riskCounts.Low}</div><div className="stat-label">Low Risk</div></div>
               <div className="stat-card"><div className="stat-value" style={{color:'var(--risk-mod)'}}>{riskCounts.Moderate}</div><div className="stat-label">Moderate Risk</div></div>
               <div className="stat-card"><div className="stat-value" style={{color:'var(--risk-high)'}}>{riskCounts.High}</div><div className="stat-label">High Risk</div></div>
@@ -532,6 +710,8 @@ function App() {
                   <option value="sqft-desc">Sq Ft: Largest</option>
                   <option value="sqft-asc">Sq Ft: Smallest</option>
                   <option value="pctgood-desc">% Good: High → Low</option>
+                  <option value="value-desc">Market Value: High → Low</option>
+                  <option value="value-asc">Market Value: Low → High</option>
                   <option value="address-asc">Address: A → Z</option>
                 </select>
               </div>
@@ -554,7 +734,7 @@ function App() {
 
       <footer className="footer">
         <p>Saint Rose Property Assessment Data · Source: Building Condition Assessment Reports · Albany, NY</p>
-        <p style={{marginTop:4}}>Data extracted from official assessment documents · For informational purposes</p>
+        <p style={{marginTop:4}}>Assessment values sourced from Albany County 2025 Final Assessment Roll · For informational purposes only</p>
       </footer>
 
       {selectedProp && <DetailView prop={selectedProp} onClose={()=>setSelectedProp(null)}/>}
