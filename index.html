@@ -36,10 +36,10 @@ button{cursor:pointer;font-family:inherit}
 .header h1{font-size:1.4rem;font-weight:700;letter-spacing:-.02em}
 .header h1 span{color:var(--accent);font-weight:800}
 .header-subtitle{font-size:.8rem;opacity:.7;font-weight:300}
-.nav-tabs{display:flex;gap:4px}
-.nav-tab{padding:8px 18px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:transparent;color:#fff;font-size:.85rem;font-weight:500;transition:all .2s}
-.nav-tab:hover{background:rgba(255,255,255,.1)}
-.nav-tab.active{background:var(--accent);border-color:var(--accent);font-weight:600}
+.nav-tabs{display:flex;background:rgba(0,0,0,.28);border-radius:9px;padding:3px;gap:0}
+.nav-tab{padding:9px 22px;border-radius:7px;border:none;background:transparent;color:rgba(255,255,255,.72);font-size:.875rem;font-weight:500;transition:all .15s;white-space:nowrap;letter-spacing:.01em}
+.nav-tab:hover{color:#fff;background:rgba(255,255,255,.1)}
+.nav-tab.active{background:#fff;color:var(--primary);font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.22)}
 .compare-badge{background:#e53e3e;color:#fff;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:.7rem;margin-left:4px;font-weight:700}
 
 /* Container */
@@ -87,7 +87,7 @@ select.filter-select{padding:8px 12px;border:1px solid var(--border);border-radi
 .compare-check:hover{border-color:var(--primary-light)}
 
 /* Detail View */
-.detail-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;overflow-y:auto;padding:20px}
+.detail-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;overflow-y:auto;padding:20px}
 .detail-panel{max-width:1100px;margin:0 auto;background:var(--card);border-radius:var(--radius-lg);overflow:hidden;box-shadow:0 25px 50px rgba(0,0,0,.25)}
 .detail-header{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#fff;padding:24px 32px;position:relative}
 .detail-close{position:absolute;top:16px;right:20px;background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:1.2rem;display:flex;align-items:center;justify-content:center;transition:background .2s}
@@ -192,6 +192,15 @@ select.filter-select{padding:8px 12px;border:1px solid var(--border);border-radi
 .map-wrap{position:relative;margin-bottom:20px}
 .map-container{width:100%;height:calc(100vh - 240px);min-height:520px;border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-lg)}
 .map-legend{position:absolute;bottom:32px;right:12px;z-index:1000;background:#fff;padding:10px 14px;border-radius:var(--radius);box-shadow:0 2px 8px rgba(0,0,0,.18);font-size:.78rem;line-height:1.9;pointer-events:none}
+.map-info-panel{position:absolute;top:12px;left:12px;z-index:1000;width:272px;background:#fff;border-radius:var(--radius-lg);box-shadow:0 4px 20px rgba(0,0,0,.22);padding:16px;pointer-events:all}
+.map-info-panel .mip-close{position:absolute;top:10px;right:10px;background:none;border:none;font-size:1.1rem;color:var(--text-muted);line-height:1;padding:2px 5px;border-radius:4px}
+.map-info-panel .mip-close:hover{background:var(--bg);color:var(--text)}
+.map-info-panel .mip-addr{font-weight:700;font-size:.95rem;color:var(--text);margin-bottom:2px;padding-right:22px}
+.map-info-panel .mip-name{font-size:.78rem;color:var(--text-muted);margin-bottom:9px}
+.map-info-panel .mip-badges{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
+.map-info-panel .mip-meta{font-size:.78rem;color:var(--text-light);margin-bottom:12px}
+.map-info-panel .mip-btn{width:100%;padding:8px 12px;background:var(--primary);color:#fff;border:none;border-radius:var(--radius);font-size:.82rem;font-weight:600;transition:background .15s}
+.map-info-panel .mip-btn:hover{background:var(--primary-light)}
 </style>
 </head>
 <body>
@@ -628,6 +637,9 @@ function MapView({ search, riskFilter, onSelect }) {
   const mapRef  = useRef(null);
   const mapInst = useRef(null);
   const markers = useRef([]);
+  const [sel, setSel] = useState(null); // property shown in the side panel
+
+  const RISK_COL = {'Low':'#38a169','Moderate':'#d69e2e','High':'#dd6b20','Very High':'#e53e3e'};
 
   const displayData = useMemo(() => {
     const coords = (typeof COORDS_DATA !== 'undefined') ? COORDS_DATA : {};
@@ -646,11 +658,14 @@ function MapView({ search, riskFilter, onSelect }) {
   // Initialise Leaflet map once on mount
   useEffect(() => {
     if (!mapRef.current || mapInst.current || typeof L === 'undefined') return;
-    mapInst.current = L.map(mapRef.current, {center:[42.6632,-73.7862], zoom:16});
+    const map = L.map(mapRef.current, {center:[42.6632,-73.7862], zoom:16});
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxZoom:19
-    }).addTo(mapInst.current);
+    }).addTo(map);
+    // Clicking the map background closes the info panel
+    map.on('click', () => setSel(null));
+    mapInst.current = map;
     return () => { if (mapInst.current) { mapInst.current.remove(); mapInst.current = null; } };
   }, []);
 
@@ -665,36 +680,56 @@ function MapView({ search, riskFilter, onSelect }) {
     if (!mapInst.current) return;
     markers.current.forEach(m => m.remove());
     markers.current = [];
-    const RISK_COL = {'Low':'#38a169','Moderate':'#d69e2e','High':'#dd6b20','Very High':'#e53e3e'};
-    window.__mapDetail = id => { const p = ENRICHED_DATA.find(x => x.id === id); if(p) onSelect(p); };
     displayData.forEach(p => {
       const col = RISK_COL[p.risk] || '#718096';
-      const fmv = fmtK(p.parcel?.fullMarketValue);
       const m = L.circleMarker([p.coords.lat, p.coords.lng], {
         radius:9, fillColor:col, color:'#fff', weight:2, opacity:1, fillOpacity:.85
       }).addTo(mapInst.current);
-      m.bindPopup(
-        `<div style="font-family:Inter,system-ui,sans-serif;min-width:195px;padding:2px 0">` +
-        `<div style="font-weight:700;font-size:.93rem;color:#1a202c;margin-bottom:3px">${p.streetNum} ${p.streetName}</div>` +
-        (p.buildingName ? `<div style="font-size:.77rem;color:#718096;margin-bottom:7px">${p.buildingName}</div>` : `<div style="margin-bottom:7px"></div>`) +
-        `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px">` +
-        `<span style="background:${col};color:#fff;padding:2px 9px;border-radius:10px;font-size:.73rem;font-weight:700">${p.condScore} \xb7 ${p.risk} Risk</span>` +
-        (fmv ? `<span style="background:#ebf4ff;color:#2c5282;padding:2px 8px;border-radius:10px;font-size:.73rem;font-weight:700">${fmv}</span>` : '') +
-        `</div>` +
-        `<div style="font-size:.77rem;color:#4a5568;margin-bottom:9px">${p.sqFt} sq ft \xa0\xb7\xa0 ${p.pctGood}% good+</div>` +
-        `<button onclick="window.__mapDetail('${p.id}')" ` +
-        `style="width:100%;padding:7px 10px;background:#1e3a5f;color:#fff;border:none;border-radius:6px;font-size:.81rem;font-weight:600;cursor:pointer" ` +
-        `onmouseover="this.style.background='#2c5282'" onmouseout="this.style.background='#1e3a5f'">View Details \u2192</button></div>`,
-        {maxWidth:260}
+      // Hover tooltip — lightweight, dismisses automatically
+      m.bindTooltip(
+        `<strong>${p.streetNum} ${p.streetName}</strong>${p.buildingName ? '<br><span style="color:#718096">' + p.buildingName + '</span>' : ''}`,
+        {direction:'top', offset:[0,-8], opacity:.97}
       );
+      // Click opens React-managed info panel (no Leaflet popup)
+      m.on('click', e => {
+        L.DomEvent.stopPropagation(e);
+        setSel(p);
+      });
       markers.current.push(m);
     });
-  }, [displayData, onSelect]);
+  }, [displayData]);
 
-  const RISK_COL = {'Low':'#38a169','Moderate':'#d69e2e','High':'#dd6b20','Very High':'#e53e3e'};
+  const handleViewDetails = () => {
+    if (!sel) return;
+    const prop = sel;
+    setSel(null);
+    onSelect(prop);
+  };
+
   return (
     <div className="map-wrap">
       <div ref={mapRef} className="map-container"/>
+
+      {sel && (
+        <div className="map-info-panel">
+          <button className="mip-close" onClick={() => setSel(null)} title="Dismiss">✕</button>
+          <div className="mip-addr">{sel.streetNum} {sel.streetName}</div>
+          {sel.buildingName && <div className="mip-name">{sel.buildingName}</div>}
+          <div className="mip-badges">
+            <span style={{background:RISK_COL[sel.risk]||'#718096',color:'#fff',padding:'2px 9px',borderRadius:10,fontSize:'.73rem',fontWeight:700}}>
+              {sel.condScore} · {sel.risk} Risk
+            </span>
+            {sel.parcel?.fullMarketValue && (
+              <span style={{background:'#ebf4ff',color:'#2c5282',padding:'2px 8px',borderRadius:10,fontSize:'.73rem',fontWeight:700}}>
+                {fmtK(sel.parcel.fullMarketValue)}
+              </span>
+            )}
+          </div>
+          <div className="mip-meta">{sel.sqFt} sq ft &nbsp;·&nbsp; {sel.pctGood}% good+</div>
+          <button className="mip-btn" onClick={handleViewDetails}>View Full Details →</button>
+        </div>
+      )}
+
       <div className="map-legend">
         <div style={{fontWeight:700,marginBottom:3,fontSize:'.8rem',color:'var(--text)'}}>Investment Risk</div>
         {['Low','Moderate','High','Very High'].map(r => (
