@@ -218,6 +218,15 @@ select.filter-select{padding:8px 12px;border:1px solid var(--border);border-radi
 .mcb-go{padding:8px 16px;background:var(--primary);color:#fff;border:none;border-radius:var(--radius);font-size:.82rem;font-weight:600;white-space:nowrap;transition:background .15s}
 .mcb-go:hover:not(:disabled){background:var(--primary-light)}
 .mcb-go:disabled{background:#a0aec0;cursor:not-allowed}
+/* Map tab — full-viewport layout, no page scroll */
+.map-page{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.map-filter-bar{background:var(--card);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;gap:12px;align-items:center;flex-shrink:0;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.map-filter-bar .search-box{max-width:260px;flex:1 1 auto}
+.map-page .map-wrap{flex:1;min-height:0;margin-bottom:0}
+.map-page .map-container{height:100%;min-height:0;border-radius:0;box-shadow:none}
+/* Disabled map control button */
+.map-ctl-btn:disabled{opacity:.4;cursor:not-allowed}
+.map-ctl-btn:disabled:hover{background:rgba(255,255,255,.93);color:var(--text-light);border-color:rgba(0,0,0,.12);box-shadow:0 1px 4px rgba(0,0,0,.12)}
 </style>
 </head>
 <body>
@@ -825,6 +834,11 @@ function MapView({ search, riskFilter, onSelect, compareList, onCompare, onViewC
     });
   }, [compareList]);
 
+  // Auto-exit compare mode when the compare list becomes empty
+  useEffect(() => {
+    if (compareList.length === 0) setCompareMode(false);
+  }, [compareList.length]);
+
   const handleViewDetails = () => {
     if (!sel) return;
     const prop = sel;
@@ -887,7 +901,8 @@ function MapView({ search, riskFilter, onSelect, compareList, onCompare, onViewC
 
       <div className="map-ctl-panel">
         <button className={`map-ctl-btn ${compareMode ? 'active' : ''}`} onClick={() => setCompareMode(c => !c)}
-          title={compareMode ? 'Click a marker to toggle compare. Click again to exit.' : 'Enable compare mode: click markers directly to add/remove from compare'}>
+          disabled={compareList.length === 0}
+          title={compareList.length === 0 ? 'Add a property to compare first' : compareMode ? 'Click a marker to toggle compare. Click again to exit.' : 'Enable compare mode: click markers directly to add/remove from compare'}>
           {compareMode ? '✓ Compare Mode' : '⊕ Compare Mode'}
         </button>
         <button className={`map-ctl-btn ${showLabels ? 'active' : ''}`} onClick={() => setShowLabels(s => !s)}
@@ -960,7 +975,7 @@ function App() {
   ENRICHED_DATA.forEach(p => riskCounts[p.risk]++);
 
   return (
-    <div>
+    <div style={{display:'flex',flexDirection:'column',minHeight:'100vh'}}>
       <header className="header">
         <div className="header-inner">
           <div>
@@ -977,29 +992,46 @@ function App() {
         </div>
       </header>
 
-      <div className="container">
-        {(view === 'grid' || view === 'map') && (
-          <>
-            <div className="stats-bar">
-              <div className="stat-card"><div className="stat-value">69</div><div className="stat-label">Properties</div></div>
-              <div className="stat-card accent"><div className="stat-value">{avgScore}</div><div className="stat-label">Avg Condition</div></div>
-              <div className="stat-card"><div className="stat-value">{(totalSqFt/1000).toFixed(0)}K</div><div className="stat-label">Total Sq Ft</div></div>
-              <div className="stat-card"><div className="stat-value" style={{color:'var(--accent)'}}>${(totalFMV/1e6).toFixed(1)}M</div><div className="stat-label">Portfolio Value</div></div>
-              <div className="stat-card"><div className="stat-value" style={{color:'var(--risk-low)'}}>{riskCounts.Low}</div><div className="stat-label">Low Risk</div></div>
-              <div className="stat-card"><div className="stat-value" style={{color:'var(--risk-mod)'}}>{riskCounts.Moderate}</div><div className="stat-label">Moderate Risk</div></div>
-              <div className="stat-card"><div className="stat-value" style={{color:'var(--risk-high)'}}>{riskCounts.High}</div><div className="stat-label">High Risk</div></div>
-              <div className="stat-card"><div className="stat-value" style={{color:'var(--risk-vhigh)'}}>{riskCounts['Very High']}</div><div className="stat-label">Very High Risk</div></div>
+      {view === 'map' ? (
+        <div className="map-page">
+          <div className="map-filter-bar">
+            <input className="search-box" type="text" placeholder="Search properties…"
+              value={search} onChange={e=>setSearch(e.target.value)}/>
+            <div className="filter-group">
+              <span className="filter-label">Risk:</span>
+              <select className="filter-select" value={riskFilter} onChange={e=>setRiskFilter(e.target.value)}>
+                <option>All</option><option>Low</option><option>Moderate</option><option>High</option><option>Very High</option>
+              </select>
             </div>
-
-            <div className="controls">
-              <input className="search-box" type="text" placeholder="Search by address or building name..." value={search} onChange={e=>setSearch(e.target.value)}/>
-              <div className="filter-group">
-                <span className="filter-label">Risk:</span>
-                <select className="filter-select" value={riskFilter} onChange={e=>setRiskFilter(e.target.value)}>
-                  <option>All</option><option>Low</option><option>Moderate</option><option>High</option><option>Very High</option>
-                </select>
+            <span style={{fontSize:'.82rem',color:'var(--text-muted)',marginLeft:'auto',whiteSpace:'nowrap'}}>
+              {filtered.length} / 69 shown
+            </span>
+          </div>
+          <MapView search={search} riskFilter={riskFilter} onSelect={setSelectedProp}
+            compareList={compareList} onCompare={toggleCompare} onViewCompare={()=>setView('compare')}/>
+        </div>
+      ) : (
+        <div className="container" style={{flex:1}}>
+          {view === 'grid' && (
+            <>
+              <div className="stats-bar">
+                <div className="stat-card"><div className="stat-value">69</div><div className="stat-label">Properties</div></div>
+                <div className="stat-card accent"><div className="stat-value">{avgScore}</div><div className="stat-label">Avg Condition</div></div>
+                <div className="stat-card"><div className="stat-value">{(totalSqFt/1000).toFixed(0)}K</div><div className="stat-label">Total Sq Ft</div></div>
+                <div className="stat-card"><div className="stat-value" style={{color:'var(--accent)'}}>${(totalFMV/1e6).toFixed(1)}M</div><div className="stat-label">Portfolio Value</div></div>
+                <div className="stat-card"><div className="stat-value" style={{color:'var(--risk-low)'}}>{riskCounts.Low}</div><div className="stat-label">Low Risk</div></div>
+                <div className="stat-card"><div className="stat-value" style={{color:'var(--risk-mod)'}}>{riskCounts.Moderate}</div><div className="stat-label">Moderate Risk</div></div>
+                <div className="stat-card"><div className="stat-value" style={{color:'var(--risk-high)'}}>{riskCounts.High}</div><div className="stat-label">High Risk</div></div>
+                <div className="stat-card"><div className="stat-value" style={{color:'var(--risk-vhigh)'}}>{riskCounts['Very High']}</div><div className="stat-label">Very High Risk</div></div>
               </div>
-              {view === 'grid' && (
+              <div className="controls">
+                <input className="search-box" type="text" placeholder="Search by address or building name..." value={search} onChange={e=>setSearch(e.target.value)}/>
+                <div className="filter-group">
+                  <span className="filter-label">Risk:</span>
+                  <select className="filter-select" value={riskFilter} onChange={e=>setRiskFilter(e.target.value)}>
+                    <option>All</option><option>Low</option><option>Moderate</option><option>High</option><option>Very High</option>
+                  </select>
+                </div>
                 <div className="filter-group">
                   <span className="filter-label">Sort:</span>
                   <select className="filter-select" value={sortBy} onChange={e=>setSortBy(e.target.value)}>
@@ -1013,36 +1045,25 @@ function App() {
                     <option value="address-asc">Address: A → Z</option>
                   </select>
                 </div>
-              )}
-              <div style={{fontSize:'.82rem',color:'var(--text-muted)'}}>{filtered.length} properties</div>
-            </div>
-          </>
-        )}
-
-        {view === 'grid' && (
-          <>
-            <div className="property-grid">
-              {filtered.map(p => (
-                <PropertyCard key={p.id} prop={p} onSelect={setSelectedProp} onCompare={toggleCompare} isCompared={compareList.some(c=>c.id===p.id)}/>
-              ))}
-            </div>
-            {filtered.length === 0 && <div className="empty-state"><div className="icon">🔍</div><p>No properties match your search</p></div>}
-          </>
-        )}
-
-        {view === 'map' && (
-          <MapView search={search} riskFilter={riskFilter} onSelect={setSelectedProp} compareList={compareList} onCompare={toggleCompare} onViewCompare={() => setView('compare')}/>
-        )}
-
-        {view === 'compare' && (
-          <CompareView properties={compareList} onRemove={p=>toggleCompare(p)} onSelect={setSelectedProp}/>
-        )}
-      </div>
-
-      <footer className="footer">
-        <p>Saint Rose Property Assessment Data · Source: Building Condition Assessment Reports · Albany, NY</p>
-        <p style={{marginTop:4}}>Assessment values sourced from Albany County 2025 Final Assessment Roll · For informational purposes only</p>
-      </footer>
+                <div style={{fontSize:'.82rem',color:'var(--text-muted)'}}>{filtered.length} properties</div>
+              </div>
+              <div className="property-grid">
+                {filtered.map(p => (
+                  <PropertyCard key={p.id} prop={p} onSelect={setSelectedProp} onCompare={toggleCompare} isCompared={compareList.some(c=>c.id===p.id)}/>
+                ))}
+              </div>
+              {filtered.length === 0 && <div className="empty-state"><div className="icon">🔍</div><p>No properties match your search</p></div>}
+            </>
+          )}
+          {view === 'compare' && (
+            <CompareView properties={compareList} onRemove={p=>toggleCompare(p)} onSelect={setSelectedProp}/>
+          )}
+          <footer className="footer">
+            <p>Saint Rose Property Assessment Data · Source: Building Condition Assessment Reports · Albany, NY</p>
+            <p style={{marginTop:4}}>Assessment values sourced from Albany County 2025 Final Assessment Roll · For informational purposes only</p>
+          </footer>
+        </div>
+      )}
 
       {selectedProp && <DetailView prop={selectedProp} onClose={()=>setSelectedProp(null)}/>}
     </div>
