@@ -579,7 +579,7 @@ function CompareView({properties, onRemove, onSelect}) {
 
   return (
     <div className="compare-container">
-      <div className="compare-grid" style={{gridTemplateColumns:`220px repeat(${properties.length}, 1fr)`}}>
+      <div className="compare-grid" style={{gridTemplateColumns:`250px repeat(${properties.length}, 1fr)`}}>
         <div className="compare-header-cell"><h4>System</h4></div>
         {properties.map(p => (
           <div className="compare-header-cell" key={p.id}>
@@ -634,13 +634,13 @@ function CompareView({properties, onRemove, onSelect}) {
                   const sys = (p.categories[cat]||[]).find(s=>s.s===sysName);
                   if(!sys) return <div className="compare-cell" key={p.id} style={{color:'#a0aec0'}}>—</div>;
                   return (
-                    <div className="compare-cell" key={p.id}>
-                      <span className={`system-rating ${sys.n?ratingBg(sys.n):sys.r==='x'?'rx':'rna'}`} style={{marginRight:6}}>{sys.r}</span>
+                    <div className="compare-cell" key={p.id} style={{flexDirection:'column',gap:4}}>
+                      <span className={`system-rating ${sys.n?ratingBg(sys.n):sys.r==='x'?'rx':'rna'}`}>{sys.r}</span>
                       {sys.c && (
-                        <span title={sys.c} style={{fontSize:'.71rem',color:'var(--primary-light)',cursor:'help',
-                          borderBottom:'1px dotted var(--primary-light)',marginLeft:5,maxWidth:115,
-                          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'inline-block',verticalAlign:'middle'}}>
-                          {sys.c.length > 26 ? sys.c.slice(0,24) + '…' : sys.c}
+                        <span title={sys.c} style={{fontSize:'.68rem',color:'var(--primary-light)',cursor:'help',
+                          borderBottom:'1px dotted var(--primary-light)',maxWidth:120,
+                          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block',textAlign:'center'}}>
+                          {sys.c.length > 22 ? sys.c.slice(0,20) + '…' : sys.c}
                         </span>
                       )}
                     </div>
